@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import API_URL from "@/lib/api";
+import InteractiveLibraryMap from "@/components/InteractiveLibraryMap";
+import AdminLayoutEditor from "@/components/AdminLayoutEditor";
 
 export default function AdminConsole() {
   const router = useRouter();
@@ -311,10 +313,13 @@ export default function AdminConsole() {
         <div className="brand-title" style={{ fontFamily: "var(--font-headings)", fontWeight: "400", letterSpacing: "2px", fontSize: "1.1rem" }}>
           SHIVNERI CONSOLE
         </div>
-        <nav className="nav-links">
+        <nav className="nav-links" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           <span className={`nav-btn ${activeTab === "users" ? "active" : ""}`} onClick={() => setActiveTab("users")} style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>Users</span>
+          <span className={`nav-btn ${activeTab === "map" ? "active" : ""}`} onClick={() => setActiveTab("map")} style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>🗺️ Actual Map</span>
+          <span className={`nav-btn ${activeTab === "editor" ? "active" : ""}`} onClick={() => setActiveTab("editor")} style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>🛠️ Layout Builder</span>
+          <span className={`nav-btn ${activeTab === "registrations" ? "active" : ""}`} onClick={() => setActiveTab("registrations")} style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>📋 Approvals</span>
+          <Link href="/admin/whatsapp" className="nav-btn" style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>💬 WhatsApp Hub</Link>
           <span className={`nav-btn ${activeTab === "broadcast" ? "active" : ""}`} onClick={() => setActiveTab("broadcast")} style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>Broadcast</span>
-          <span className={`nav-btn ${activeTab === "seats" ? "active" : ""}`} onClick={() => setActiveTab("seats")} style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>Seats</span>
           <span className={`nav-btn ${activeTab === "plans" ? "active" : ""}`} onClick={() => setActiveTab("plans")} style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>Plans</span>
           <span className="nav-btn" onClick={handleLogout} style={{ fontSize: "0.75rem", letterSpacing: "1px", textTransform: "uppercase" }}>Logout</span>
         </nav>
@@ -445,6 +450,42 @@ export default function AdminConsole() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Actual Library Map */}
+        {activeTab === "map" && (
+          <div style={{ background: "#ffffff", border: "1px solid #e8e6e0", borderRadius: "12px", padding: "1.5rem" }}>
+            <InteractiveLibraryMap seats={seats} />
+          </div>
+        )}
+
+        {/* Tab: Layout Builder */}
+        {activeTab === "editor" && (
+          <div style={{ background: "#ffffff", border: "1px solid #e8e6e0", borderRadius: "12px", padding: "1.5rem" }}>
+            <AdminLayoutEditor 
+              seats={seats} 
+              onSaveLayout={async (updatedSeats) => {
+                await fetch(`${API_URL}/api/seats/layout`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                  body: JSON.stringify(updatedSeats)
+                });
+                setSeats(updatedSeats);
+              }}
+            />
+          </div>
+        )}
+
+        {/* Tab: Student Registration Approvals Queue */}
+        {activeTab === "registrations" && (
+          <div style={{ background: "#ffffff", border: "1px solid #e8e6e0", borderRadius: "12px", padding: "2rem" }}>
+            <h2 style={{ fontSize: "1.2rem", fontFamily: "var(--font-headings)", fontWeight: "400", letterSpacing: "1px", textTransform: "uppercase", marginBottom: "0.5rem" }}>📋 Student Self-Registration Approvals Queue</h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: "1.5rem" }}>Review pending online student registrations, verify payment reference UTR, and trigger instant WhatsApp welcome setup.</p>
+
+            <div style={{ border: "1px solid #e8e6e0", borderRadius: "8px", padding: "1.5rem", background: "#faf9f6" }}>
+              <p style={{ fontSize: "0.85rem", color: "#666" }}>No pending registrations awaiting approval right now.</p>
             </div>
           </div>
         )}

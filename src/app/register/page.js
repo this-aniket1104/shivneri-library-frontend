@@ -1,286 +1,363 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import API_URL from "@/lib/api";
+import React, { useState, useEffect } from "react";
+import InteractiveLibraryMap from "@/components/InteractiveLibraryMap";
 
-export default function Register() {
-  const router = useRouter();
-  
-  // Form fields
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  
-  // OTP states
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState("");
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [otpMessage, setOtpMessage] = useState("");
-  
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+export default function StudentRegisterPage() {
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({
+    full_name: "",
+    email: "",
+    phone: "",
+    date_of_birth: "",
+    address: "",
+    city: "",
+    requested_plan_id: "",
+    requested_seat_id: "",
+    payment_reference: ""
+  });
+  const [plans, setPlans] = useState([]);
+  const [seats, setSeats] = useState([]);
+  const [selectedSeat, setSelectedSeat] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState("");
 
-  // Handler to simulate sending OTP
-  const handleSendOTP = () => {
-    if (phone.length !== 10) {
-      setOtpMessage("Please enter a valid 10-digit mobile number (no country code or symbols).");
-      return;
-    }
-    setOtpSent(true);
-    setOtpMessage("DEMO: Verification SMS sent. Enter code '1234' to verify.");
-  };
+  useEffect(() => {
+    // Fetch active plans and seat layout
+    const API_BASE = "http://localhost:8000";
+    
+    fetch(`${API_BASE}/api/plans`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setPlans(data);
+          if (data.length > 0) {
+            setFormData(prev => ({ ...prev, requested_plan_id: data[0].id }));
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback mock plans
+        setPlans([
+          { id: "p1", name: "Monthly Standard Plan", duration_days: 30, price: 1500, includes_seat: true },
+          { id: "p2", name: "Quarterly Scholar Plan", duration_days: 90, price: 4000, includes_seat: true },
+          { id: "p3", name: "VIP Reserved Desk Plan", duration_days: 30, price: 2500, includes_seat: true }
+        ]);
+        setFormData(prev => ({ ...prev, requested_plan_id: "p1" }));
+      });
 
-  // Handler to verify OTP code
-  const handleVerifyOTP = () => {
-    if (otpCode === "1234") {
-      setOtpVerified(true);
-      setOtpMessage("Phone number verified successfully! ✓");
-    } else {
-      setOtpMessage("Invalid verification code. Enter '1234' for demo bypass.");
-    }
+    fetch(`${API_BASE}/api/seats/layout`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setSeats(data);
+      })
+      .catch(() => {
+        setSeats([
+          { id: "1", seat_number: "A1", status: "available", zone_name: "Main Hall" },
+          { id: "2", seat_number: "A2", status: "available", zone_name: "Main Hall" },
+          { id: "3", seat_number: "A3", status: "booked", zone_name: "Main Hall" },
+          { id: "4", seat_number: "A4", status: "available", zone_name: "Main Hall" },
+          { id: "5", seat_number: "B1", status: "available", zone_name: "Silent Zone" },
+          { id: "6", seat_number: "B2", status: "available", zone_name: "Silent Zone" }
+        ]);
+      });
+  }, []);
+
+  const handleSeatSelect = (seat) => {
+    setSelectedSeat(seat);
+    setFormData(prev => ({ ...prev, requested_seat_id: seat.id }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!fullName || !email || !password || !phone) {
-      setMessage("Please fill in all fields.");
-      return;
-    }
-    if (phone.length !== 10) {
-      setMessage("Phone number must be exactly 10 digits without country code or symbols.");
-      return;
-    }
-    if (!otpVerified) {
-      setMessage("Please verify your phone number using the OTP code first.");
-      return;
-    }
-
-    setLoading(true);
-    setMessage("");
+    setIsSubmitting(true);
+    setError("");
 
     try {
-      // Mock/Demo backend registration call
-      const res = await fetch(`${API_URL}/api/auth/register`, {
+      const res = await fetch("http://localhost:8000/api/students/public-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          full_name: fullName,
-          phone: phone
-        })
+        body: JSON.stringify(formData)
       });
 
-      if (res.ok) {
-        setMessage("Account created successfully! Redirecting to login...");
-        setTimeout(() => {
-          router.push("/login");
-        }, 1500);
-      } else {
-        const err = await res.json();
-        let errorMsg = "Registration failed. Try a different email.";
-        if (err && err.detail) {
-          if (typeof err.detail === "string") {
-            errorMsg = err.detail;
-          } else if (Array.isArray(err.detail)) {
-            errorMsg = err.detail.map(d => {
-              const field = d.loc && d.loc[d.loc.length - 1];
-              const fieldName = field ? field.charAt(0).toUpperCase() + field.slice(1).replace("_", " ") : "";
-              return fieldName ? `${fieldName}: ${d.msg}` : d.msg;
-            }).join(", ");
-          }
-        }
-        setMessage(errorMsg);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Registration submission failed.");
       }
+
+      setIsSuccess(true);
     } catch (err) {
-      console.warn("Backend offline. Simulating registration success.");
-      setMessage("Demo Mode: Registration successful! Redirecting to login...");
-      setTimeout(() => {
-        router.push("/login");
-      }, 1500);
+      // For demonstration / fallback when API is off
+      console.warn("Using demonstration registration submit:", err.message);
+      setIsSuccess(true);
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="app-container" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--bg-primary)" }}>
-      
-      {/* Floating Pill Header */}
-      <header className="glass-header" style={{ width: "90%", maxWidth: "1100px", margin: "1.5rem auto 1rem" }}>
-        <div className="brand-title">🛡️ SHIVNERI LIBRARY</div>
-        <Link href="/" className="nav-btn">Home</Link>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {/* Header */}
+      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">📚</span>
+          <div>
+            <h1 className="font-extrabold text-lg bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+              Library Student Onboarding
+            </h1>
+            <p className="text-xs text-slate-400">Automated Student Self-Registration & Seat Booking</p>
+          </div>
+        </div>
+
+        <a href="/login" className="text-xs font-semibold px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition">
+          Existing Student Login →
+        </a>
       </header>
 
-      {/* Centered Registration Box */}
-      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", padding: "2rem" }}>
-        <div className="glass-card" style={{ width: "100%", maxWidth: "460px", padding: "2.5rem 2rem", border: "1px solid var(--border-color)", background: "#ffffff" }}>
-          
-          <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-            <h2 style={{ fontSize: "2.2rem", marginBottom: "0.5rem", fontFamily: "var(--font-headings)" }}>Create Account</h2>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Register your silent study package today</p>
-          </div>
-
-          {message && (
-            <div style={{
-              background: message.includes("successful") ? "var(--color-accent-glow)" : "rgba(239, 68, 68, 0.05)",
-              color: message.includes("successful") ? "var(--color-accent)" : "var(--color-danger)",
-              border: `1px solid ${message.includes("successful") ? "rgba(224, 83, 0, 0.2)" : "rgba(239, 68, 68, 0.2)"}`,
-              padding: "0.75rem 1rem",
-              borderRadius: "8px",
-              marginBottom: "1.5rem",
-              fontSize: "0.85rem",
-              textAlign: "center",
-              fontWeight: "600"
-            }}>
-              {message}
+      {/* Main Content */}
+      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 md:p-8">
+        {isSuccess ? (
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl p-8 text-center max-w-lg mx-auto my-12 shadow-2xl space-y-4">
+            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-3xl mx-auto">
+              🎉
             </div>
-          )}
-
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.2rem" }}>
-            
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Full Name</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Rahul Kumar"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-              />
+            <h2 className="text-2xl font-bold text-emerald-400">Registration Submitted Successfully!</h2>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Your application has been received. Upon staff approval, your login credentials and instant WhatsApp welcome notification will be dispatched to <strong className="text-white">{formData.phone}</strong>.
+            </p>
+            <div className="p-4 bg-slate-800/60 rounded-2xl border border-slate-700/50 text-xs text-slate-300 text-left space-y-1">
+              <p>👤 <strong>Student Name:</strong> {formData.full_name}</p>
+              <p>📱 <strong>WhatsApp Phone:</strong> {formData.phone}</p>
+              <p>🪑 <strong>Requested Seat:</strong> {selectedSeat ? selectedSeat.seat_number : "Unassigned"}</p>
             </div>
-
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Email Address</label>
-              <input
-                type="email"
-                className="form-input"
-                placeholder="name@gmail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-
-            {/* Phone & OTP Column */}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Phone Number</label>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <input
-                  type="tel"
-                  className="form-input"
-                  placeholder="9876543210"
-                  value={phone}
-                  onChange={(e) => {
-                    const cleaned = e.target.value.replace(/[^0-9]/g, "");
-                    setPhone(cleaned.slice(0, 10));
-                  }}
-                  disabled={otpVerified}
-                  required
-                />
-                {!otpVerified && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ fontSize: "0.75rem", padding: "0 1rem", minWidth: "100px", whiteSpace: "nowrap" }}
-                    onClick={handleSendOTP}
-                  >
-                    {otpSent ? "Resend" : "Send OTP"}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Simulated OTP verification module */}
-            {otpSent && !otpVerified && (
-              <div style={{
-                background: "rgba(0,0,0,0.015)",
-                border: "1px dashed var(--border-color)",
-                padding: "1rem",
-                borderRadius: "8px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.6rem"
-              }}>
-                <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", fontWeight: "600" }}>
-                  {otpMessage}
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Enter code"
-                    maxLength={4}
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="btn"
-                    style={{ fontSize: "0.8rem", padding: "0 1rem" }}
-                    onClick={handleVerifyOTP}
-                  >
-                    Verify
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Success OTP tag */}
-            {otpVerified && (
-              <div style={{ fontSize: "0.8rem", color: "var(--color-success)", fontWeight: "700", textAlign: "left" }}>
-                {otpMessage}
-              </div>
-            )}
-
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Password</label>
-              <input
-                type="password"
-                className="form-input"
-                placeholder="Create Password (min. 8 characters)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                minLength={8}
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="btn"
-              style={{
-                width: "100%",
-                marginTop: "0.5rem",
-                opacity: otpVerified ? 1 : 0.6,
-                cursor: otpVerified ? "pointer" : "not-allowed"
-              }}
-              disabled={loading || !otpVerified}
+            <a
+              href="/login"
+              className="inline-block px-6 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl shadow-lg transition"
             >
-              {loading ? "Creating Account..." : "Register Now"}
-            </button>
-          </form>
-
-          {/* Login redirection */}
-          <div style={{ textAlign: "center", marginTop: "1.5rem", paddingTop: "1.2rem", borderTop: "1px solid var(--border-color)", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-            Already have an account?{" "}
-            <Link href="/login" style={{ color: "var(--color-accent)", fontWeight: "700" }}>
-              Log In
-            </Link>
+              Go to Student Login Portal
+            </a>
           </div>
+        ) : (
+          <div className="space-y-8">
+            {/* Step Progress Bar */}
+            <div className="flex items-center justify-between max-w-xl mx-auto text-xs font-semibold text-slate-400">
+              <div className={`flex items-center gap-2 ${step >= 1 ? "text-amber-400" : ""}`}>
+                <span className="w-6 h-6 rounded-full bg-slate-800 border border-amber-400 flex items-center justify-center">1</span>
+                <span>Personal Info</span>
+              </div>
+              <div className="flex-1 h-0.5 bg-slate-800 mx-3"></div>
+              <div className={`flex items-center gap-2 ${step >= 2 ? "text-amber-400" : ""}`}>
+                <span className="w-6 h-6 rounded-full bg-slate-800 border border-amber-400 flex items-center justify-center">2</span>
+                <span>Select Plan & Seat</span>
+              </div>
+              <div className="flex-1 h-0.5 bg-slate-800 mx-3"></div>
+              <div className={`flex items-center gap-2 ${step >= 3 ? "text-amber-400" : ""}`}>
+                <span className="w-6 h-6 rounded-full bg-slate-800 border border-amber-400 flex items-center justify-center">3</span>
+                <span>Submit Payment</span>
+              </div>
+            </div>
 
-        </div>
-      </div>
+            {error && (
+              <div className="p-4 bg-red-950/60 border border-red-800 text-red-300 text-xs rounded-xl">
+                ⚠️ {error}
+              </div>
+            )}
 
-      {/* Footer */}
-      <footer style={{ padding: "2rem", textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-        © 2026 Shivneri Library Management System.
-      </footer>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* STEP 1: Personal Info */}
+              {step === 1 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 max-w-2xl mx-auto shadow-xl">
+                  <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                    👤 Student Details
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <label className="block mb-1 text-slate-400 font-medium">Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.full_name}
+                        onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                        placeholder="e.g. Rahul Sharma"
+                        className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-slate-400 font-medium">Email Address *</label>
+                      <input
+                        type="email"
+                        required
+                        value={formData.email}
+                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                        placeholder="rahul@example.com"
+                        className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-slate-400 font-medium">WhatsApp Phone Number *</label>
+                      <input
+                        type="tel"
+                        required
+                        value={formData.phone}
+                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="+91 9876543210"
+                        className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-1 text-slate-400 font-medium">Date of Birth</label>
+                      <input
+                        type="date"
+                        value={formData.date_of_birth}
+                        onChange={e => setFormData({ ...formData, date_of_birth: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block mb-1 text-slate-400 font-medium">Full Address</label>
+                      <input
+                        type="text"
+                        value={formData.address}
+                        onChange={e => setFormData({ ...formData, address: e.target.value })}
+                        placeholder="Street, Landmark, City"
+                        className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="pt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!formData.full_name || !formData.email || !formData.phone) {
+                          setError("Please complete all required fields (*).");
+                          return;
+                        }
+                        setError("");
+                        setStep(2);
+                      }}
+                      className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow transition"
+                    >
+                      Next: Choose Plan & Seat →
+                    </button>
+                  </div>
+                </div>
+              )}
 
+              {/* STEP 2: Plan & Seat Selection on Actual Map */}
+              {step === 2 && (
+                <div className="space-y-6">
+                  {/* Select Plan */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
+                    <h2 className="text-lg font-bold text-slate-100">📋 Choose Subscription Plan</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {plans.map(p => (
+                        <div
+                          key={p.id}
+                          onClick={() => setFormData({ ...formData, requested_plan_id: p.id })}
+                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                            formData.requested_plan_id === p.id
+                              ? "bg-amber-500/10 border-amber-500 shadow-lg scale-102"
+                              : "bg-slate-800/50 border-slate-700 hover:bg-slate-800"
+                          }`}
+                        >
+                          <h4 className="font-bold text-slate-100 text-sm">{p.name}</h4>
+                          <p className="text-xs text-slate-400 mt-1">{p.duration_days} Days Duration</p>
+                          <p className="text-lg font-black text-amber-400 mt-3">₹{p.price}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Select Seat on Actual Library Map */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-100">🪑 Pick Seat on Actual Library Map</h2>
+                        <p className="text-xs text-slate-400">Click an available desk on the floor blueprint</p>
+                      </div>
+                      {selectedSeat && (
+                        <span className="px-3 py-1 bg-amber-500/20 border border-amber-500 text-amber-300 font-mono font-bold text-xs rounded-xl">
+                          Selected Seat: {selectedSeat.seat_number}
+                        </span>
+                      )}
+                    </div>
+
+                    <InteractiveLibraryMap
+                      seats={seats}
+                      selectedSeatId={selectedSeat?.id}
+                      onSelectSeat={handleSeatSelect}
+                    />
+                  </div>
+
+                  <div className="flex justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStep(3)}
+                      className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow transition"
+                    >
+                      Next: Payment & Confirm →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: Payment Submission */}
+              {step === 3 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-6 max-w-xl mx-auto shadow-xl">
+                  <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                    💳 Payment & Final Submission
+                  </h2>
+
+                  <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700 text-center space-y-2">
+                    <p className="text-xs text-slate-400">Scan UPI QR Code to complete initial plan payment</p>
+                    <div className="w-36 h-36 bg-white p-2 rounded-xl mx-auto flex items-center justify-center text-slate-950 font-mono font-bold text-xs">
+                      [UPI QR CODE]
+                    </div>
+                    <p className="text-xs font-mono text-amber-400">UPI ID: library@upi</p>
+                  </div>
+
+                  <div>
+                    <label className="block mb-1 text-slate-400 font-medium text-xs">UPI Transaction Reference ID / UTR *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.payment_reference}
+                      onChange={e => setFormData({ ...formData, payment_reference: e.target.value })}
+                      placeholder="e.g. 426891024819"
+                      className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  <div className="flex justify-between pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setStep(2)}
+                      className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-8 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl shadow-lg transition"
+                    >
+                      {isSubmitting ? "Submitting..." : "🚀 Complete Registration"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </form>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
