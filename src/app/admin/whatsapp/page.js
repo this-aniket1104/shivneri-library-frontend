@@ -2,6 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+function getToken() {
+  return localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+}
+
 export default function WhatsAppManagementPage() {
   const [logs, setLogs] = useState([]);
   const [phone, setPhone] = useState("");
@@ -9,49 +15,38 @@ export default function WhatsAppManagementPage() {
   const [broadcastText, setBroadcastText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+  const [isError, setIsError] = useState(false);
 
   useEffect(() => {
     fetchLogs();
   }, []);
 
   const fetchLogs = () => {
-    fetch("http://localhost:8000/api/whatsapp/logs")
+    fetch(`${API_BASE}/api/whatsapp/logs`, {
+      headers: {
+        "Authorization": `Bearer ${getToken()}`
+      }
+    })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setLogs(data);
       })
-      .catch(() => {
-        // Mock WhatsApp log data
-        setLogs([
-          {
-            id: "w1",
-            recipient_phone: "919876543210",
-            template_name: "welcome_registration",
-            message_body: "🎉 Welcome to Library, Rahul Sharma! Your registration is active.",
-            status: "sent",
-            sent_at: "2026-09-16T10:15:00Z"
-          },
-          {
-            id: "w2",
-            recipient_phone: "919812345678",
-            template_name: "renewal_reminder",
-            message_body: "⚠️ Subscription Renewal Alert: Hi Priya, your plan expires in 2 days.",
-            status: "sent",
-            sent_at: "2026-09-16T09:00:00Z"
-          }
-        ]);
-      });
+      .catch(() => setLogs([]));
   };
 
   const handleSendDirect = async (e) => {
     e.preventDefault();
     setIsSending(true);
     setStatusMsg("");
+    setIsError(false);
 
     try {
-      const res = await fetch("http://localhost:8000/api/whatsapp/send", {
+      const res = await fetch(`${API_BASE}/api/whatsapp/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${getToken()}`
+        },
         body: JSON.stringify({
           recipient_phone: phone,
           template_name: "custom_message",
@@ -59,14 +54,21 @@ export default function WhatsAppManagementPage() {
         })
       });
 
-      if (!res.ok) throw new Error("Failed to send message");
-      setStatusMsg("✅ WhatsApp message dispatched successfully!");
+      const data = await res.json();
+
+      if (!res.ok) {
+        setIsError(true);
+        setStatusMsg(`❌ Error: ${data.detail || "Failed to send message"}`);
+        return;
+      }
+
+      setStatusMsg(`✅ WhatsApp message dispatched! Status: ${data.status}`);
       setPhone("");
       setMessage("");
       fetchLogs();
     } catch (err) {
-      setStatusMsg("⚠️ WhatsApp dispatched in test/mock mode.");
-      fetchLogs();
+      setIsError(true);
+      setStatusMsg("❌ Network error. Check API connection.");
     } finally {
       setIsSending(false);
     }
@@ -75,16 +77,34 @@ export default function WhatsAppManagementPage() {
   const handleBroadcast = async (e) => {
     e.preventDefault();
     setIsSending(true);
+    setIsError(false);
+    setStatusMsg("");
+
     try {
-      await fetch("http://localhost:8000/api/whatsapp/broadcast?announcement_text=" + encodeURIComponent(broadcastText), {
-        method: "POST"
-      });
-      setStatusMsg("📢 Broadcast sent to all active students!");
+      const res = await fetch(
+        `${API_BASE}/api/whatsapp/broadcast?announcement_text=${encodeURIComponent(broadcastText)}`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${getToken()}`
+          }
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setIsError(true);
+        setStatusMsg(`❌ Error: ${data.detail || "Broadcast failed"}`);
+        return;
+      }
+
+      setStatusMsg(`📢 ${data.message}`);
       setBroadcastText("");
       fetchLogs();
     } catch (err) {
-      setStatusMsg("📢 Broadcast dispatched to students in test mode.");
-      fetchLogs();
+      setIsError(true);
+      setStatusMsg("❌ Network error. Check API connection.");
     } finally {
       setIsSending(false);
     }
@@ -99,18 +119,18 @@ export default function WhatsAppManagementPage() {
           </h1>
           <p className="text-xs text-slate-400">Manage automated WhatsApp notifications, custom alerts, and delivery audit logs</p>
         </div>
-
         <a href="/admin" className="text-xs text-slate-400 hover:text-slate-200">← Back to Admin Panel</a>
       </header>
 
       {statusMsg && (
-        <div className="p-4 bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs rounded-xl">
+        <div className={`p-4 border text-xs rounded-xl ${isError
+          ? "bg-red-950/60 border-red-800 text-red-300"
+          : "bg-emerald-950/60 border-emerald-800 text-emerald-300"}`}>
           {statusMsg}
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Direct Message Form */}
         <form onSubmit={handleSendDirect} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             ✉️ Send Direct WhatsApp Message
@@ -146,7 +166,6 @@ export default function WhatsAppManagementPage() {
           </button>
         </form>
 
-        {/* Broadcast Form */}
         <form onSubmit={handleBroadcast} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
             📢 Bulk Broadcast Announcement
@@ -172,7 +191,6 @@ export default function WhatsAppManagementPage() {
         </form>
       </div>
 
-      {/* WhatsApp Logs Audit Table */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
         <h2 className="text-lg font-bold text-slate-100">📋 Delivery Audit Log</h2>
         <div className="overflow-x-auto rounded-xl border border-slate-800">
@@ -187,19 +205,28 @@ export default function WhatsAppManagementPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {logs.map(log => (
-                <tr key={log.id} className="hover:bg-slate-800/40 transition">
-                  <td className="p-3 font-mono font-bold text-emerald-400">{log.recipient_phone}</td>
-                  <td className="p-3 font-mono text-slate-300">{log.template_name}</td>
-                  <td className="p-3 text-slate-300 max-w-md truncate">{log.message_body}</td>
-                  <td className="p-3">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                      {log.status.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="p-3 text-slate-400 font-mono text-[11px]">{new Date(log.sent_at).toLocaleString()}</td>
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-6 text-center text-slate-500">No logs found</td>
                 </tr>
-              ))}
+              ) : (
+                logs.map(log => (
+                  <tr key={log.id} className="hover:bg-slate-800/40 transition">
+                    <td className="p-3 font-mono font-bold text-emerald-400">{log.recipient_phone}</td>
+                    <td className="p-3 font-mono text-slate-300">{log.template_name}</td>
+                    <td className="p-3 text-slate-300 max-w-md truncate">{log.message_body}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${log.status === "sent"
+                          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                          : "bg-red-500/20 text-red-400 border-red-500/30"
+                        }`}>
+                        {log.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-400 font-mono text-[11px]">{new Date(log.sent_at).toLocaleString()}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

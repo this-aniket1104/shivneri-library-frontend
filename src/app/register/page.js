@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import InteractiveLibraryMap from "@/components/InteractiveLibraryMap";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function StudentRegisterPage() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -25,8 +27,7 @@ export default function StudentRegisterPage() {
 
   useEffect(() => {
     // Fetch active plans and seat layout
-    const API_BASE = "http://localhost:8000";
-    
+
     fetch(`${API_BASE}/api/plans`)
       .then(res => res.json())
       .then(data => {
@@ -75,7 +76,7 @@ export default function StudentRegisterPage() {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:8000/api/students/public-register", {
+      const res = await fetch(`${API_BASE}/api/students/public-register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData)
@@ -255,11 +256,10 @@ export default function StudentRegisterPage() {
                         <div
                           key={p.id}
                           onClick={() => setFormData({ ...formData, requested_plan_id: p.id })}
-                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                            formData.requested_plan_id === p.id
-                              ? "bg-amber-500/10 border-amber-500 shadow-lg scale-102"
-                              : "bg-slate-800/50 border-slate-700 hover:bg-slate-800"
-                          }`}
+                          className={`p-4 rounded-2xl border cursor-pointer transition-all ${formData.requested_plan_id === p.id
+                            ? "bg-amber-500/10 border-amber-500 shadow-lg scale-102"
+                            : "bg-slate-800/50 border-slate-700 hover:bg-slate-800"
+                            }`}
                         >
                           <h4 className="font-bold text-slate-100 text-sm">{p.name}</h4>
                           <p className="text-xs text-slate-400 mt-1">{p.duration_days} Days Duration</p>
